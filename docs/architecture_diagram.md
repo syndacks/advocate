@@ -99,7 +99,7 @@ sequenceDiagram
 |-------|------|--------|-----------|
 | 0 | Repo Bootstrap | **built** | `pyproject.toml`, `docker-compose.yml`, `.env.example`, `Makefile`, `alembic.ini`, `src/advocate/config.py`, `infra/migrations/env.py`, `infra/migrations/versions/0001_create_all_tables.py`, `apps/api/main.py`, `apps/worker/main.py`, `tests/conftest.py` |
 | 1 | Core Data Layer | **built** | `src/advocate/domain/__init__.py`, `src/advocate/domain/models.py`, `src/advocate/storage/db.py`, `src/advocate/storage/orm.py`, `src/advocate/storage/repositories.py`, `src/advocate/storage/audit.py`, `infra/migrations/versions/0002_add_immutable_table_guards.py`, `tests/unit/test_domain_models.py`, `tests/integration/test_repositories_core.py`, `tests/integration/test_immutable_tables.py` |
-| 2 | Ingestion Service | planned | `src/advocate/ingestion/router.py`, `src/advocate/ingestion/storage.py`, `src/advocate/ingestion/hashing.py`, `src/advocate/ingestion/events.py` |
+| 2 | Ingestion Service | **built** | `src/advocate/ingestion/__init__.py`, `src/advocate/ingestion/router.py`, `src/advocate/ingestion/storage.py`, `src/advocate/ingestion/hashing.py`, `src/advocate/ingestion/events.py`, `src/advocate/processing/flows.py`, `apps/api/main.py`, `apps/worker/main.py`, `tests/conftest.py`, `tests/unit/test_ingestion_hashing.py`, `tests/unit/test_ingestion_validation.py`, `tests/unit/test_ingestion_events.py`, `tests/integration/test_ingestion_api.py` |
 | 3 | Processing Flow | planned | `src/advocate/processing/flows.py`, `src/advocate/processing/locks.py`, `src/advocate/processing/inspect.py`, `src/advocate/processing/manifest.py` |
 | 4 | Merge And Case State | planned | `src/advocate/domain/requirements.py`, `src/advocate/domain/observations.py`, `src/advocate/processing/merge.py`, `src/advocate/processing/state_machine.py`, `src/advocate/processing/contradictions.py`, `src/advocate/processing/actions.py` |
 | 5 | OCR And Extraction | planned | `src/advocate/processing/ocr.py`, `src/advocate/processing/normalize.py`, `src/advocate/processing/extract.py`, `src/advocate/processing/llm_contracts.py` |
@@ -122,3 +122,12 @@ sequenceDiagram
 - `infra/migrations/versions/0002_add_immutable_table_guards.py` adds database-level append-only guards for immutable tables
 - `infra/migrations/env.py` now exposes ORM metadata for autogenerate support while remaining safe to import in tests
 - pytest async loop scope now defaults to `function` so async database fixtures clean up reliably
+
+## 8. Phase 2 Notes
+
+- `POST /cases/{case_id}/evidence` now accepts exactly one of an uploaded file or pasted `text_content`
+- raw evidence bytes are hashed with SHA-256, stored in MinIO/S3, then persisted as append-only `evidence_items`
+- `GET /cases/{case_id}/timeline` and `GET /cases/{case_id}/state/latest` now read directly from the Phase 1 repository layer
+- ingestion emits a real Prefect deployment-backed flow run through `process-case-event/ingestion`
+- `src/advocate/processing/flows.py` is still a Phase 2 stub; advisory locks, manifests, and `processing_runs` remain Phase 3 work
+- `src/advocate/storage/db.py` uses `NullPool` when `APP_ENV=test` so API integration tests can safely create async sessions across function-scoped event loops

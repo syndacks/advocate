@@ -8,7 +8,10 @@ Integration tests: use `async_engine`, `async_db_session`, and `test_client`
 import os
 import subprocess
 import sys
+from collections.abc import Awaitable, Callable
+from uuid import UUID, uuid4
 
+import boto3
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -19,6 +22,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.pool import NullPool
+
+from advocate.domain.models import CandidateCreate, CaseCreate
+from advocate.storage.repositories import insert_candidate, insert_case
 
 _STUB_ENV: dict[str, str] = {
     "DATABASE_URL": "postgresql+asyncpg://advocate:advocate@localhost:5433/advocate_app",
@@ -100,3 +106,55 @@ async def test_client() -> AsyncClient:  # type: ignore[misc]
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+def minio_client() -> object:
+    """Boto3 S3 client for MinIO read-back assertions."""
+    return boto3.client(
+        "s3",
+        endpoint_url=os.environ["S3_ENDPOINT_URL"],
+        aws_access_key_id=os.environ["S3_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["S3_SECRET_ACCESS_KEY"],
+        region_name=os.environ.get("S3_REGION", "us-east-1"),
+    )
+
+
+@pytest_asyncio.fixture
+async def create_candidate_and_case(
+    async_db_session: AsyncSession,
+) -> Callable[[], Awaitable[tuple[UUID, UUID]]]:
+    """Create a committed candidate and case for API integration tests."""
+
+    async def _create() -> tuple[UUID, UUID]:
+        candidate = await insert_candidate(
+            async_db_session,
+            CandidateCreate(
+                full_name="Alex Rivera",
+                primary_email=f"alex+{uuid4()}@example.com",
+                target_comp_min=140000,
+                target_comp_max=180000,
+            ),
+        )
+        case = await insert_case(
+            async_db_session,
+            CaseCreate(
+                candidate_id=candidate.candidate_id,
+                company_name=f"ExampleCo-{uuid4()}",
+                role_title="Senior Product Manager",
+                source_channel="manual_ui",
+                metadata_json={"origin": "test"},
+            ),
+        )
+        await async_db_session.commit()
+        return candidate.candidate_id, case.case_id
+
+    return _create
+
+
+@pytest_asyncio.fixture
+async def ensure_process_case_event_deployment() -> UUID:
+    """Ensure the Phase 2 Prefect deployment exists before dispatch tests run."""
+    from apps.worker.main import ensure_process_case_event_deployment as ensure_deployment
+
+    return await ensure_deployment()

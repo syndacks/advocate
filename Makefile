@@ -8,7 +8,10 @@ dev-up:
 	docker compose up -d
 	@echo "Waiting for services to be healthy..."
 	@docker compose wait postgres redis minio || true
-	@echo "Services running. Postgres: 5432 | MinIO: 9000 | Prefect: 4200"
+	@echo "Services running. Postgres: 5433 | MinIO: 9000 | Prefect: 4200"
+	@echo "Creating advocate_app database (if not exists)..."
+	@PGPASSWORD=advocate psql -h localhost -p 5433 -U advocate -d advocate -c "CREATE DATABASE advocate_app OWNER advocate;" 2>/dev/null || true
+	@echo "advocate_app database ready."
 
 dev-down:
 	docker compose down

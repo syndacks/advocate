@@ -45,21 +45,25 @@ graph TD
     end
 
     subgraph Bootstrap["Bootstrap And Runtime"]
-        PY["pyproject.toml [planned]"]
-        DC["docker-compose.yml [planned]"]
-        ENV[".env.example [planned]"]
-        CFG["configs/settings.toml [planned]"]
+        PY["pyproject.toml [built]"]
+        DC["docker-compose.yml [built]"]
+        ENV[".env.example [built]"]
+        MK["Makefile [built]"]
+        CFG["src/advocate/config.py [built]"]
+        ALB["alembic.ini [built]"]
+        MENV["infra/migrations/env.py [built]"]
+        M001["infra/migrations/versions/0001_create_all_tables.py [built]"]
     end
 
     subgraph API["API And Ingestion"]
-        APIM["apps/api/main.py [planned]"]
+        APIM["apps/api/main.py [built]"]
         ING1["src/advocate/ingestion/service.py [planned]"]
         ING2["src/advocate/ingestion/object_store.py [planned]"]
         ING3["src/advocate/ingestion/events.py [planned]"]
     end
 
     subgraph Worker["Processing And State"]
-        WM["apps/worker/main.py [planned]"]
+        WM["apps/worker/main.py [built]"]
         P1["src/advocate/processing/flows.py [planned]"]
         P2["src/advocate/processing/locks.py [planned]"]
         P3["src/advocate/processing/inspect.py [planned]"]
@@ -76,7 +80,7 @@ graph TD
     end
 
     subgraph Storage["Storage And Provenance"]
-        M1["infra/migrations/0001_core_tables.sql [planned]"]
+        M1["infra/migrations/versions/0001_create_all_tables.py [built]"]
         DB["src/advocate/storage/db.py [planned]"]
         REPO["src/advocate/storage/repositories.py [planned]"]
         PROV["src/advocate/storage/provenance.py [planned]"]
@@ -143,34 +147,57 @@ Goal:
 
 - make the repo runnable locally
 
-Expected files:
+Built files:
 
-- `pyproject.toml`
-- `docker-compose.yml`
-- `.env.example`
-- `configs/settings.toml`
-- `apps/api/main.py`
-- `apps/worker/main.py`
-- `docs/architecture_diagram.md`
+- `pyproject.toml` [built]
+- `docker-compose.yml` [built] — Postgres (port 5433), Redis, MinIO, Prefect v3 server
+- `.env.example` [built]
+- `Makefile` [built]
+- `alembic.ini` [built]
+- `src/advocate/config.py` [built] — `Settings(BaseSettings)` singleton
+- `infra/migrations/env.py` [built] — async Alembic environment
+- `infra/migrations/versions/0001_create_all_tables.py` [built] — all 15 tables + pgvector
+- `apps/api/main.py` [built] — minimal FastAPI + `/health`
+- `apps/worker/main.py` [built] — no-op Prefect v3 flow
+- `tests/conftest.py` [built] — async engine + session + test client fixtures
+- `tests/unit/test_config.py` [built] — 3 config smoke tests
+- `tests/integration/test_migrations.py` [built] — 4 migration tests
+- `tests/integration/test_noop_flow.py` [built] — 2 worker + API tests
+- `docs/architecture_diagram.md` [built]
 
 ```mermaid
 graph TD
-    P0A["pyproject.toml [planned]"]
-    P0B["docker-compose.yml [planned]"]
-    P0C[".env.example [planned]"]
-    P0D["configs/settings.toml [planned]"]
-    P0E["apps/api/main.py [planned]"]
-    P0F["apps/worker/main.py [planned]"]
-    P0G["docs/architecture_diagram.md [built]"]
+    P0A["pyproject.toml [built]"]
+    P0B["docker-compose.yml [built]"]
+    P0C[".env.example [built]"]
+    P0D["Makefile [built]"]
+    P0E["src/advocate/config.py [built]"]
+    P0F["alembic.ini [built]"]
+    P0G["infra/migrations/env.py [built]"]
+    P0H["infra/migrations/versions/0001_create_all_tables.py [built]"]
+    P0I["apps/api/main.py [built]"]
+    P0J["apps/worker/main.py [built]"]
+    P0K["tests/conftest.py [built]"]
+    P0L["docs/architecture_diagram.md [built]"]
     P0A --> P0E
-    P0A --> P0F
-    P0B --> P0E
-    P0B --> P0F
+    P0A --> P0I
+    P0A --> P0J
+    P0B --> P0I
+    P0B --> P0J
+    P0E --> P0G
+    P0F --> P0G
+    P0G --> P0H
+    P0K --> P0I
+    P0K --> P0J
 ```
 
 Phase note:
 
-- update this section with the actual bootstrap files once Phase 0 lands
+- `configs/settings.toml` was dropped in favour of `src/advocate/config.py` (pydantic-settings from env)
+- Postgres exposed on host port 5433 (not 5432) to avoid conflict with a local Postgres instance
+- Prefect upgraded from v2 to v3 to match the installed Python client
+- App database is `advocate_app`; Prefect uses `advocate` to avoid `alembic_version` collision
+- `dev-up` target auto-creates `advocate_app` if it does not exist
 
 ### Phase 1: Core Data Layer
 

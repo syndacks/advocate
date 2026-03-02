@@ -1,8 +1,12 @@
 """Integration tests for Alembic migrations — requires a running Postgres."""
 
+import importlib
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from advocate.storage.orm import Base
 
 EXPECTED_TABLES = [
     "candidates",
@@ -17,6 +21,19 @@ EXPECTED_TABLES = [
     "prediction_runs",
     "recommended_actions",
     "processing_runs",
+    "evaluation_run_outputs",
+    "audit_events",
+    "retrieval_chunks",
+]
+
+IMMUTABLE_TABLES = [
+    "evidence_items",
+    "artifacts",
+    "component_observations",
+    "case_state_versions",
+    "case_evaluation_runs",
+    "evaluation_run_inputs",
+    "evaluation_run_producers",
     "evaluation_run_outputs",
     "audit_events",
     "retrieval_chunks",
@@ -81,3 +98,32 @@ async def test_case_evaluation_runs_unique_version_constraint(async_engine: Asyn
         indexes = [row[0] for row in result]
 
     assert len(indexes) >= 1, "No unique index on case_state_version_id found"
+
+
+@pytest.mark.integration
+async def test_immutable_triggers_created(async_engine: AsyncEngine) -> None:
+    """Immutable tables have non-internal update/delete guard triggers."""
+    async with async_engine.connect() as conn:
+        result = await conn.execute(
+            text(
+                """
+                SELECT trigger_name
+                FROM information_schema.triggers
+                WHERE event_object_schema = 'public'
+                  AND trigger_name LIKE 'trg_prevent_%_mutation'
+                """
+            )
+        )
+        trigger_names = {row[0] for row in result}
+
+    for table_name in IMMUTABLE_TABLES:
+        assert f"trg_prevent_{table_name}_mutation" in trigger_names
+
+
+def test_alembic_env_uses_orm_metadata() -> None:
+    """Alembic env exposes ORM metadata for autogenerate support."""
+    env = importlib.import_module("infra.migrations.env")
+
+    assert env.target_metadata is Base.metadata
+    assert "candidates" in env.target_metadata.tables
+    assert "case_evaluation_runs" in env.target_metadata.tables

@@ -42,13 +42,14 @@ Scenario direction is defined in [specs/scenario_vision.md](/Users/dacks/repos/a
 
 [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) is a living deliverable.
 
+The diagram is kept at **subsystem level** — one box per package or service, not one box per file. File-level detail lives in the phase log table, not in the mermaid graph.
+
 Rules:
 
-1. Before implementing a phase, update the planned file nodes for that phase if the file map changed.
-2. During the phase, keep the diagram aligned with any file renames or structural changes.
-3. At the end of the phase, mark completed files as `[built]` and add a short phase note for any divergence.
-4. A phase is not complete until the diagram reflects the actual repository state for that phase.
-5. The diagram should include real file paths, not abstract boxes without filenames.
+1. The system diagram shows subsystems and data flow arrows. Do not add individual files to it.
+2. At the end of each phase, update the phase log table: change the row status from `planned` to `built` and update the key files list to reflect what was actually built.
+3. Add a numbered phase notes section if the implementation diverged from the plan.
+4. A phase is not complete until the phase log row is marked `built`.
 
 ## 5. Phases
 
@@ -60,7 +61,7 @@ Deliverables:
 - base Python project and dependency management
 - local docker services for Postgres, object storage, Redis, and Prefect
 - environment template and config loading
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with actual bootstrap files
+- update the phase log in docs/architecture_diagram.md
 
 Key files to create:
 - `pyproject.toml` — all dependencies, pytest config, ruff/mypy config
@@ -100,7 +101,6 @@ Acceptance criteria:
 - database migrations run successfully
 - object storage bucket is reachable
 - Prefect can execute a no-op flow
-- the architecture diagram reflects the actual bootstrap file set
 
 TDD slice:
 
@@ -117,7 +117,7 @@ Deliverables:
 - typed domain models for evaluation provenance tables
 - repository layer for append-only inserts and latest-state reads
 - audit event writer
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual Phase 1 files
+- update the phase log in docs/architecture_diagram.md
 
 Key files to create:
 - `src/advocate/domain/models.py` — Pydantic v2 domain models (no DB logic)
@@ -146,7 +146,6 @@ Acceptance criteria:
 - can persist and retrieve a case state version by `case_id`
 - can persist and retrieve an evaluation manifest for a case state version
 - uniqueness and append-only constraints are enforced
-- the architecture diagram reflects the actual data-layer files
 
 TDD slice:
 
@@ -164,7 +163,7 @@ Deliverables:
 - content hashing
 - `evidence.received` event emission
 - timeline retrieval endpoints
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual ingestion files
+- update the phase log in docs/architecture_diagram.md
 
 Key files to create:
 - `src/advocate/ingestion/router.py` — FastAPI router with evidence endpoints
@@ -192,7 +191,6 @@ Acceptance criteria:
 - raw payload lands in object storage before the API returns
 - duplicate uploads do not corrupt state
 - UI can list evidence for a case in arrival order
-- the architecture diagram reflects the actual ingestion file set
 
 TDD slice:
 
@@ -210,7 +208,7 @@ Deliverables:
 - processing run tracking
 - evaluation manifest open and close behavior
 - idempotent retry behavior
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual worker and processing files
+- update the phase log in docs/architecture_diagram.md
 
 Key files to create:
 - `src/advocate/processing/flows.py` — `@flow process_case_event(case_id: UUID, evidence_id: UUID)`
@@ -244,7 +242,6 @@ Acceptance criteria:
 - concurrent evidence for different cases processes independently
 - concurrent evidence for the same case is serialized
 - a completed flow leaves behind a traceable evaluation manifest
-- the architecture diagram reflects the actual processing flow files
 
 TDD slice:
 
@@ -263,7 +260,7 @@ Deliverables:
 - merge engine that materializes `CaseStateVersion`
 - completion, staleness, contradiction, and stage computation
 - evaluation input and output binding for state materialization
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual state-machine and merge files
+- update the phase log in docs/architecture_diagram.md
 
 Key files to create:
 - `src/advocate/domain/requirements.py` — `load_requirements(path) -> CaseRequirements` parser for case_requirements.yaml
@@ -295,7 +292,6 @@ Acceptance criteria:
 - contradictions are visible in state output
 - stage labels are derived purely from state, not side effects
 - the created case state version is linked to its exact observations and configs via the evaluation manifest
-- the architecture diagram reflects the actual merge and state files
 
 TDD slice:
 
@@ -313,7 +309,7 @@ Deliverables:
 - schema-validated LLM extraction task
 - artifact recording for prompts, models, and extraction outputs
 - evaluation producer records for OCR and LLM-backed tasks
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual extraction files
+- update the phase log in docs/architecture_diagram.md
 
 Acceptance criteria:
 
@@ -322,7 +318,6 @@ Acceptance criteria:
 - invalid LLM responses fail safely and do not mutate state
 - extraction output can be replayed into the merge engine
 - model name, model version, and prompt version are auditable for LLM-backed outputs
-- the architecture diagram reflects the actual OCR and extraction file set
 
 TDD slice:
 
@@ -341,7 +336,7 @@ Deliverables:
 - deterministic action candidate generation
 - optional LLM action ranking and draft generation
 - versioned scoring and retrieval producer capture in provenance
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual scoring and retrieval files
+- update the phase log in docs/architecture_diagram.md
 
 Acceptance criteria:
 
@@ -350,7 +345,6 @@ Acceptance criteria:
 - at least one rule-generated action appears for incomplete or stale cases
 - LLM ranking never removes mandatory actions
 - each prediction and action is traceable to the evaluation run that emitted it
-- the architecture diagram reflects the actual scoring and retrieval file set
 
 TDD slice:
 
@@ -367,7 +361,7 @@ Deliverables:
 - citation assembly from evidence ids and artifact refs
 - markdown and PDF rendering
 - evaluation output binding for packet artifacts
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual rendering files
+- update the phase log in docs/architecture_diagram.md
 
 Acceptance criteria:
 
@@ -375,7 +369,6 @@ Acceptance criteria:
 - every non-trivial claim includes source evidence references
 - packet artifacts are stored and versioned
 - every rendered packet is attached to the case version that produced it
-- the architecture diagram reflects the actual rendering file set
 
 TDD slice:
 
@@ -394,14 +387,13 @@ Deliverables:
 - state panel
 - next best action panel
 - packet review and export view
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual UI files
+- update the phase log in docs/architecture_diagram.md
 
 Acceptance criteria:
 
 - can create a case and upload evidence end to end
 - latest state and scores are visible without reading raw tables
 - packet artifacts can be reviewed and exported
-- the architecture diagram reflects the actual UI file set
 
 TDD slice:
 
@@ -418,14 +410,13 @@ Deliverables:
 - assertions for component state, score bounds, actions, and packets
 - CI target for scenario replay
 - initial scenario suite defined by [specs/scenario_vision.md](/Users/dacks/repos/advocate/specs/scenario_vision.md)
-- update [docs/architecture_diagram.md](/Users/dacks/repos/advocate/docs/architecture_diagram.md) with the actual evaluation files
+- update the phase log in docs/architecture_diagram.md
 
 Acceptance criteria:
 
 - a scenario can replay evidence into a fresh local environment
 - regressions fail with specific diffs
 - scenario data is not accessible to prompts or retrieval corpora
-- the architecture diagram reflects the actual evaluation file set
 
 TDD slice:
 

@@ -12,8 +12,13 @@ import sys
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import NullPool
 
 _STUB_ENV: dict[str, str] = {
     "DATABASE_URL": "postgresql+asyncpg://advocate:advocate@localhost:5433/advocate_app",
@@ -69,7 +74,7 @@ def _run_migrations(db_url: str) -> None:
 @pytest_asyncio.fixture
 async def async_engine(db_url: str, _run_migrations: None) -> AsyncEngine:  # type: ignore[misc]
     """Function-scoped async engine. Disposes after each test to avoid loop conflicts."""
-    engine = create_async_engine(db_url, echo=False)
+    engine = create_async_engine(db_url, echo=False, poolclass=NullPool)
     yield engine
     await engine.dispose()
 
@@ -77,14 +82,15 @@ async def async_engine(db_url: str, _run_migrations: None) -> AsyncEngine:  # ty
 @pytest_asyncio.fixture
 async def async_db_session(async_engine: AsyncEngine) -> AsyncSession:  # type: ignore[misc]
     """Function-scoped async DB session. Rolls back after each test."""
-    async_session_factory = sessionmaker(  # type: ignore[call-overload]
+    async_session_factory = async_sessionmaker(
         async_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
     async with async_session_factory() as session:
         yield session
-        await session.rollback()
+        if session.in_transaction():
+            await session.rollback()
 
 
 @pytest_asyncio.fixture

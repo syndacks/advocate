@@ -1,0 +1,85 @@
+scenario_id: conflicting_compensation_offer
+description: >
+  Candidate receives a verbal offer with one compensation figure communicated
+  verbally (captured via note), then a formal offer letter arrives with a
+  different base salary amount. The system must detect the contradiction,
+  flag decision.compensation_signal as contradicted, and recommend
+  reconcile_conflict as the top action.
+
+candidate:
+  full_name: Jordan Kim
+  email: jordan.kim@example.com
+  location: New York, NY
+  target_comp_min: 160000
+  target_comp_max: 210000
+
+case:
+  company_name: Acme Corp
+  role_title: Director of Product
+  job_posting_url: https://acme.example.com/jobs/dir-product-99
+
+evidence_sequence:
+  - at: 2026-01-10T10:00:00Z
+    file: evidence/job_posting.txt
+    source_channel: browser_clip
+    evidence_type: web_job_posting
+    mime_type: text/plain
+
+  - at: 2026-01-12T14:00:00Z
+    file: evidence/tailored_resume.pdf
+    source_channel: manual_ui
+    evidence_type: document_pdf
+    mime_type: application/pdf
+
+  - at: 2026-01-13T09:00:00Z
+    file: evidence/application_confirmation.eml
+    source_channel: email_forward
+    evidence_type: message_email
+    mime_type: message/rfc822
+
+  - at: 2026-01-20T11:00:00Z
+    file: evidence/phone_screen_notes.txt
+    source_channel: manual_ui
+    evidence_type: note_text
+    mime_type: text/plain
+
+  - at: 2026-01-28T16:30:00Z
+    file: evidence/verbal_offer_note.txt
+    source_channel: manual_ui
+    evidence_type: note_text
+    mime_type: text/plain
+
+  - at: 2026-01-30T09:00:00Z
+    file: evidence/formal_offer_letter.pdf
+    source_channel: manual_ui
+    evidence_type: document_pdf
+    mime_type: application/pdf
+
+evaluate_at: 2026-01-30T18:00:00Z
+
+assertions:
+  final_stage_label: negotiating
+
+  present_components:
+    - opportunity.target_role
+    - opportunity.job_description
+    - engagement.application_submitted
+    - engagement.interview_feedback
+    - decision.outcome_signal
+    - decision.compensation_signal
+
+  missing_components: []
+
+  stale_components_contains: []
+
+  # The verbal note says $195,000; the offer letter says $172,000.
+  # These differ by more than the allowed tolerance → contradiction.
+  contradicted_components:
+    - decision.compensation_signal
+
+  top_actions_contains:
+    - reconcile_conflict
+
+  packet_artifacts_exist: true
+  packet_types_include:
+    - offer_evaluation_packet

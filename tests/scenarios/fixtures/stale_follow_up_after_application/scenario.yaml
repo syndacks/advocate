@@ -1,0 +1,72 @@
+scenario_id: stale_follow_up_after_application
+description: >
+  Candidate submits application after uploading resume and job posting.
+  No recruiter contact or follow-up occurs. After the stale_after_days
+  window for follow_up_contact has passed, the system should flag the
+  component as stale and recommend send_follow_up as the top action.
+
+candidate:
+  full_name: Alex Rivera
+  email: alex.rivera@example.com
+  location: Remote
+  target_comp_min: 140000
+  target_comp_max: 180000
+
+case:
+  company_name: ExampleCo
+  role_title: Senior Product Manager
+  job_posting_url: https://example.com/jobs/sr-pm-123
+
+# Evidence arrives in chronological order.
+# The scenario runner replays these at the given timestamps.
+evidence_sequence:
+  - at: 2026-02-01T09:00:00Z
+    file: evidence/job_posting.txt
+    source_channel: browser_clip
+    evidence_type: web_job_posting
+    mime_type: text/plain
+
+  - at: 2026-02-02T11:00:00Z
+    file: evidence/tailored_resume.pdf
+    source_channel: manual_ui
+    evidence_type: document_pdf
+    mime_type: application/pdf
+
+  - at: 2026-02-03T15:00:00Z
+    file: evidence/application_confirmation.eml
+    source_channel: email_forward
+    evidence_type: message_email
+    mime_type: message/rfc822
+
+# The evaluation timestamp for final assertions.
+# Set past the stale_after_days=10 window for follow_up_contact.
+evaluate_at: 2026-02-14T12:00:00Z
+
+assertions:
+  final_stage_label: submitted
+  completion_ratio_min: 0.30
+  completion_ratio_max: 0.60
+
+  # These components must be present
+  present_components:
+    - opportunity.target_role
+    - opportunity.job_description
+    - engagement.application_submitted
+
+  # These required components must be missing
+  missing_components:
+    - identity.resume_aligned
+    - relevance.quantified_impact_examples
+
+  # follow_up_contact window is 10 days; evaluate_at is 11 days after application
+  stale_components_contains:
+    - engagement.follow_up_contact
+
+  contradicted_components: []
+
+  # Actions must include send_follow_up as the highest priority matched action
+  top_actions_contains:
+    - send_follow_up
+
+  # No packet artifacts expected at this stage (application not yet interview-ready)
+  packet_artifacts_exist: false

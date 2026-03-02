@@ -1,0 +1,26 @@
+Senior Product Manager — ExampleCo
+
+ExampleCo is building the next generation of B2B workflow automation tools.
+We are looking for an experienced Senior Product Manager to join our Platform
+team and own the roadmap for our core integration infrastructure.
+
+Responsibilities:
+- Define and drive the product strategy for ExampleCo's integration platform
+- Work closely with engineering, design, and GTM teams
+- Translate customer problems into clear requirements and prioritized backlogs
+- Own OKRs for platform adoption and developer satisfaction
+
+Requirements:
+- 5+ years of product management experience
+- Experience with developer-facing products or platform/API products
+- Strong analytical skills; comfortable with SQL and quantitative analysis
+- Track record of shipping impactful features at scale
+
+Nice to have:
+- Experience at a B2B SaaS company with >$10M ARR
+- Familiarity with workflow automation or integration markets
+
+Compensation: $150,000–$185,000 base + equity + benefits
+Location: Remote (US)
+
+Apply at: https://example.com/jobs/sr-pm-123

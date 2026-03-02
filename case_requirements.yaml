@@ -1,0 +1,318 @@
+version: 1
+case_type: opportunity_pursuit
+
+metadata:
+  description: >
+    Deterministic component requirements for a job-search case engine that
+    evaluates one company-role pursuit at a time.
+  owner: dacks
+  evidence_taxonomy: /Users/dacks/repos/advocate/specs/evidence_taxonomy.md
+  observation_schemas: /Users/dacks/repos/advocate/specs/observations.md
+  state_machine_semantics: /Users/dacks/repos/advocate/specs/state_machine.md
+
+defaults:
+  stale_after_days: null
+  minimum_confidence: 0.6
+  contradiction_policy: surface
+
+components:
+  identity:
+    resume_aligned:
+      required: true
+      description: Resume variant is tailored enough to the target role.
+      accepted_evidence_types:
+        - document_pdf
+        - note_text
+        - structured_json
+      minimum_confidence: 0.75
+    portfolio_or_work_samples:
+      required: false
+      description: Evidence of shipped work, writing, demos, or product output.
+      accepted_evidence_types:
+        - document_pdf
+        - document_image
+        - note_text
+        - structured_json
+    target_narrative:
+      required: true
+      description: A concise explanation of why this role and why now.
+      accepted_evidence_types:
+        - note_text
+        - transcript_text
+
+  opportunity:
+    target_role:
+      required: true
+      description: Role title, level, and company target are captured.
+      accepted_evidence_types:
+        - document_pdf
+        - note_text
+        - structured_json
+        - web_job_posting
+      minimum_confidence: 0.9
+    job_description:
+      required: true
+      description: Current job posting or equivalent requirements summary exists.
+      accepted_evidence_types:
+        - document_pdf
+        - document_image
+        - note_text
+        - web_job_posting
+      minimum_confidence: 0.8
+    recruiter_or_decision_maker:
+      required: false
+      description: Named person tied to the case for outreach or process tracking.
+      accepted_evidence_types:
+        - message_email
+        - note_text
+        - structured_json
+    timeline_anchor:
+      required: false
+      description: Key date such as applied date, recruiter reply, or interview date.
+      accepted_evidence_types:
+        - message_email
+        - calendar_event
+        - note_text
+        - structured_json
+
+  relevance:
+    top_matching_experience:
+      required: true
+      description: Strong evidence that prior work maps to the posted requirements.
+      accepted_evidence_types:
+        - document_pdf
+        - note_text
+        - transcript_text
+        - structured_json
+      minimum_confidence: 0.75
+    quantified_impact_examples:
+      required: true
+      description: At least one measurable outcome backs the candidate's fit.
+      accepted_evidence_types:
+        - document_pdf
+        - note_text
+        - structured_json
+      minimum_confidence: 0.7
+    requirement_coverage:
+      required: true
+      description: Major requirement clusters are mapped to supporting evidence.
+      accepted_evidence_types:
+        - document_pdf
+        - note_text
+        - structured_json
+        - web_job_posting
+      minimum_confidence: 0.7
+    gap_explanations:
+      required: false
+      description: Missing requirements have a credible mitigation narrative.
+      accepted_evidence_types:
+        - note_text
+        - transcript_text
+
+  engagement:
+    application_submitted:
+      required: false
+      description: The system has evidence that the application was submitted.
+      accepted_evidence_types:
+        - message_email
+        - document_image
+        - note_text
+        - structured_json
+    recruiter_contact:
+      required: false
+      description: There is an external contact signal from a recruiter or hiring team.
+      accepted_evidence_types:
+        - message_email
+        - note_text
+        - transcript_text
+      stale_after_days: 14
+    follow_up_contact:
+      required: false
+      description: A recent follow-up exists after an application or interview.
+      accepted_evidence_types:
+        - message_email
+        - note_text
+      stale_after_days: 10
+    interview_feedback:
+      required: false
+      description: Feedback or notes exist from a completed interview stage.
+      accepted_evidence_types:
+        - message_email
+        - note_text
+        - transcript_text
+      stale_after_days: 7
+
+  decision:
+    outcome_signal:
+      required: false
+      description: Explicit reject, advance, hold, or offer signal exists.
+      accepted_evidence_types:
+        - message_email
+        - note_text
+        - structured_json
+    compensation_signal:
+      required: false
+      description: Compensation range, equity band, or offer economics are present.
+      accepted_evidence_types:
+        - message_email
+        - document_pdf
+        - note_text
+        - structured_json
+    close_reason:
+      required: false
+      description: If the case is closed, the reason is documented.
+      accepted_evidence_types:
+        - note_text
+        - structured_json
+
+completion:
+  weights:
+    identity.resume_aligned: 1.5
+    identity.target_narrative: 1.0
+    opportunity.target_role: 1.5
+    opportunity.job_description: 1.5
+    relevance.top_matching_experience: 1.5
+    relevance.quantified_impact_examples: 1.5
+    relevance.requirement_coverage: 1.5
+    engagement.application_submitted: 1.0
+    engagement.recruiter_contact: 0.5
+    engagement.follow_up_contact: 0.5
+    engagement.interview_feedback: 0.5
+    decision.outcome_signal: 0.5
+    decision.compensation_signal: 0.5
+
+stages:
+  - label: intake
+    when:
+      completion_ratio_lt: 0.3
+  - label: preparing
+    when:
+      completion_ratio_gte: 0.3
+      completed_components_any:
+        - identity.resume_aligned
+        - opportunity.job_description
+      completed_components_not:
+        - engagement.application_submitted
+  - label: submitted
+    when:
+      completed_components_all:
+        - engagement.application_submitted
+      completed_components_not:
+        - decision.outcome_signal
+        - engagement.interview_feedback
+  - label: interviewing
+    when:
+      completed_components_any:
+        - engagement.interview_feedback
+      completed_components_not:
+        - decision.outcome_signal
+  - label: waiting
+    when:
+      completed_components_any:
+        - engagement.follow_up_contact
+      stale_components_any:
+        - engagement.follow_up_contact
+      completed_components_not:
+        - decision.outcome_signal
+  - label: negotiating
+    when:
+      completed_components_all:
+        - decision.outcome_signal
+        - decision.compensation_signal
+      field_equals_any:
+        decision.outcome_signal.status:
+          - offer
+          - verbal_offer
+  - label: closed
+    when:
+      completed_components_all:
+        - decision.outcome_signal
+      field_equals_any:
+        decision.outcome_signal.status:
+          - rejected
+          - withdrawn
+          - closed_no_response
+          - accepted
+
+contradictions:
+  - key: compensation_mismatch
+    description: Multiple compensation figures conflict materially.
+    compare_fields:
+      - decision.compensation_signal.amount
+      - decision.compensation_signal.range_min
+      - decision.compensation_signal.range_max
+  - key: recruiter_identity_mismatch
+    description: Named recruiter or hiring contact changes without explanation.
+    compare_fields:
+      - opportunity.recruiter_or_decision_maker.contact_name
+      - opportunity.recruiter_or_decision_maker.contact_email
+  - key: role_mismatch
+    description: Resume targeting and job description point at materially different roles.
+    compare_fields:
+      - opportunity.target_role.role_title
+      - opportunity.target_role.role_family
+      - opportunity.target_role.role_level
+  - key: outcome_mismatch
+    description: Outcome evidence disagrees across sources.
+    compare_fields:
+      - decision.outcome_signal.status
+
+actions:
+  - action_type: tailor_resume
+    priority: 10
+    when_missing_any:
+      - identity.resume_aligned
+      - relevance.requirement_coverage
+    rationale: Resume or requirement mapping is insufficient for reviewer confidence.
+  - action_type: write_target_narrative
+    priority: 20
+    when_missing_any:
+      - identity.target_narrative
+    rationale: The case lacks a concise fit narrative.
+  - action_type: gather_quantified_evidence
+    priority: 30
+    when_missing_any:
+      - relevance.quantified_impact_examples
+    rationale: The case lacks measurable proof of impact.
+  - action_type: submit_application
+    priority: 40
+    when_missing_any:
+      - engagement.application_submitted
+    rationale: The case is not yet in market despite sufficient prep work.
+  - action_type: send_follow_up
+    priority: 50
+    when_stale_any:
+      - engagement.follow_up_contact
+      - engagement.recruiter_contact
+    rationale: External engagement has gone stale.
+  - action_type: prepare_interview_packet
+    priority: 60
+    when_completed_any:
+      - engagement.interview_feedback
+    rationale: The case has interview activity and should generate structured prep or recap materials.
+  - action_type: reconcile_conflict
+    priority: 70
+    when_contradictions_any:
+      - compensation_mismatch
+      - recruiter_identity_mismatch
+      - role_mismatch
+      - outcome_mismatch
+    rationale: Contradictory evidence must be surfaced and resolved before further action.
+  - action_type: archive_case
+    priority: 80
+    when_field_equals_any:
+      decision.outcome_signal.status:
+        - rejected
+        - withdrawn
+        - closed_no_response
+    rationale: The opportunity has reached a terminal state.
+
+evidence_type_reliability:
+  document_pdf: 0.85
+  document_image: 0.7
+  message_email: 0.95
+  note_text: 0.6
+  transcript_text: 0.75
+  structured_json: 0.9
+  calendar_event: 0.9
+  web_job_posting: 0.85

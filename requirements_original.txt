@@ -1,0 +1,584 @@
+Awesome. Below is a **ground-truth technical specification** you can hand to an agent (or yourself in a different mental mode) and say: *build this, do not invent new abstractions*. It is intentionally exhaustive and explicit. Think of it as the canonical design doc for a serious-but-local system that mirrors Advocate’s reality.
+
+I’m going to structure this like a real internal spec.
+
+---
+
+# Case Graph System Specification
+
+**Version:** 1.0
+**Audience:** Platform / ML / Data / Product Engineering
+**Goal:** Build a local, production-shaped system that continuously re-evaluates long-lived cases as evidence arrives, using Prefect DAGs, deterministic state machines, bounded LLM usage, and external scenario evaluation.
+
+---
+
+## 1. System Purpose and Non-Goals
+
+### 1.1 Purpose
+
+The system models **long-lived cases** where:
+
+* Evidence arrives asynchronously over time
+* Evidence is cumulative, not a snapshot
+* Each new evidence arrival triggers re-execution of an **analytical graph**
+* The graph produces:
+
+  * updated derived state
+  * predictions / assessments
+  * next best actions
+  * auditable artifacts
+
+This system is **decision support**, not automation.
+
+### 1.2 Explicit Non-Goals
+
+* Fully autonomous agents
+* Self-modifying prompts
+* Real-time low-latency inference
+* Training ML models (inference only)
+* Replacing human judgment
+
+---
+
+## 2. High-Level Architecture
+
+### 2.1 Separation of Responsibilities
+
+| Layer             | Responsibility                                     |
+| ----------------- | -------------------------------------------------- |
+| Ingestion Service | Accept evidence, guarantee durability, emit events |
+| Processing Layer  | Run analytical DAGs (Prefect)                      |
+| State Layer       | Append-only, versioned truth                       |
+| Evaluation Layer  | External scenario-based validation                 |
+| UI                | Evidence input + state visualization               |
+
+This separation is **non-negotiable**.
+
+---
+
+## 3. Core Domain Concepts
+
+### 3.1 Case
+
+A **Case** represents a single long-lived decision context.
+
+For this implementation:
+
+* Case = company in a job search
+
+Properties:
+
+* Stable identifier
+* Immutable metadata (company name, role)
+* Mutable derived state via versions
+
+A Case **never mutates directly**. All changes produce new state versions.
+
+---
+
+### 3.2 EvidenceItem (Append-Only)
+
+Evidence is the atomic input to the system.
+
+Examples:
+
+* Email text
+* Screenshot image
+* PDF
+* Interview notes
+* Calendar event
+
+Properties:
+
+* `evidence_id`
+* `case_id`
+* `source` (manual_ui, api, etc.)
+* `mime_type`
+* `received_at`
+* `content_hash`
+* `raw_blob_uri`
+
+Evidence is:
+
+* Immutable
+* Stored durably before any processing
+* Reprocessable at any time
+
+---
+
+### 3.3 Artifact (Derived, Append-Only)
+
+Artifacts are outputs of processing steps.
+
+Examples:
+
+* OCR text
+* LLM extraction JSON
+* Embeddings
+* Feature vectors
+* Rendered summaries
+
+Properties:
+
+* `artifact_id`
+* `artifact_type`
+* `input_hashes`
+* `producer` (task name + version)
+* `created_at`
+* `blob_uri`
+
+Artifacts:
+
+* Are never overwritten
+* Are content-addressed
+* Enable replay and audit
+
+---
+
+### 3.4 CaseStateVersion (The Truth)
+
+A **CaseStateVersion** is a fully materialized view of a case at a point in time.
+
+Properties:
+
+* `case_id`
+* `version_number`
+* `derived_components`
+* `completion_metrics`
+* `stage_label`
+* `prediction_outputs`
+* `created_at`
+* `parent_version`
+
+Only CaseStateVersions are read by:
+
+* UI
+* Next Best Action logic
+* Evaluation harness
+
+---
+
+## 4. Case State Machine (Core Abstraction)
+
+### 4.1 Philosophy
+
+Progress is defined by **required components**, not workflow steps.
+
+The state machine answers:
+
+* What is present?
+* What is missing?
+* What is stale?
+* What is contradictory?
+
+### 4.2 Required Components Spec
+
+Defined declaratively in `case_requirements.yaml`.
+
+Example (job search):
+
+```yaml
+components:
+  identity:
+    resume:
+      required: true
+  intent:
+    role_applied:
+      required: true
+  engagement:
+    recruiter_contact:
+      required: true
+      stale_after_days: 14
+  evaluation:
+    interview_feedback:
+      required: false
+  decision:
+    outcome:
+      required: false
+```
+
+Each component tracks:
+
+* present (boolean)
+* confidence (0–1)
+* evidence_ids
+* last_updated
+
+---
+
+### 4.3 Completion Metrics
+
+Derived fields:
+
+* `completion_ratio`
+* `missing_components`
+* `stale_components`
+* `invalid_components`
+
+These are deterministic and reproducible.
+
+---
+
+### 4.4 Derived Stage Labels
+
+Stages are **views**, not state.
+
+Example:
+
+* completion < 30% → early
+* evaluation present → evaluating
+* decision present → terminal
+
+Stage labels never drive logic directly.
+
+---
+
+## 5. Ingestion Layer (Service)
+
+### 5.1 Responsibilities
+
+The ingestion service must:
+
+* Accept evidence synchronously
+* Validate request shape
+* Store raw blob durably
+* Create EvidenceItem record
+* Emit event for downstream processing
+* Respond quickly
+
+It must **not**:
+
+* Run OCR
+* Run LLMs
+* Interpret meaning
+
+---
+
+### 5.2 UI as Evidence Source
+
+The UI is treated as an ingestion adapter.
+
+Capabilities:
+
+* Drag-and-drop images / PDFs
+* Paste plain text
+* Upload files
+
+UI behavior:
+
+* Uploads raw content
+* Does no interpretation
+* Receives evidence_id
+
+---
+
+### 5.3 OCR Decision Boundary
+
+OCR decisions are made **inside the DAG**, never in the UI.
+
+This ensures:
+
+* Realistic latency
+* Failure handling
+* Consistent behavior with production
+
+---
+
+## 6. Processing Layer (Prefect DAGs)
+
+### 6.1 Orchestration Model
+
+* Prefect is used as a job orchestrator
+* Each evidence arrival triggers a flow run
+* Flows are stateless
+* All state is externalized
+
+---
+
+### 6.2 Core Flow: `process_case_event`
+
+Inputs:
+
+* `case_id`
+* `evidence_id`
+
+High-level steps:
+
+1. Acquire per-case lock
+2. Load latest CaseStateVersion
+3. Inspect evidence
+4. Produce missing artifacts
+5. Merge into new CaseStateVersion
+6. Evaluate requirements
+7. Compute predictions
+8. Generate next best actions
+9. Persist outputs
+
+---
+
+### 6.3 Per-Case Correctness
+
+Correctness is guaranteed by:
+
+* Per-case advisory lock
+* Ordered evidence processing
+* Idempotent tasks
+* Append-only writes
+
+Race conditions are treated as bugs.
+
+---
+
+## 7. Evidence Inspection and Processing
+
+### 7.1 Inspect Evidence Task
+
+Determines:
+
+* evidence category (image, text, structured)
+* required downstream tasks
+* cache eligibility
+
+This task is deterministic.
+
+---
+
+### 7.2 OCR Task
+
+* Runs only when needed
+* Produces text artifact
+* Stores OCR confidence and metadata
+
+Failures are retried and surfaced in artifacts.
+
+---
+
+### 7.3 LLM Extraction Task (Bounded)
+
+LLMs are used **only** to extract structured signals.
+
+Rules:
+
+* Strict JSON schema
+* No free-form prose
+* No direct state mutation
+* Prompt and model version recorded
+
+LLM output is always treated as **input**, not truth.
+
+---
+
+## 8. State Merge Logic
+
+### 8.1 Merge Principles
+
+* Append-only
+* Deterministic
+* Evidence-linked
+* No silent overwrites
+
+Every merge produces a new CaseStateVersion.
+
+---
+
+### 8.2 Confidence Handling
+
+Confidence is computed using:
+
+* Evidence recency
+* Agreement across evidence
+* Extraction confidence
+
+LLMs do not assign final confidence.
+
+---
+
+## 9. Prediction and Scoring
+
+### 9.1 Scoring Model
+
+Initially:
+
+* Rule-based
+* Transparent
+* Versioned
+
+Inputs:
+
+* Derived components
+* Time-based features
+* Historical signals
+
+Outputs:
+
+* Score
+* Feature vector
+* Scoring version
+
+---
+
+## 10. Next Best Action (NBA)
+
+### 10.1 Action Candidate Generation
+
+Rules identify:
+
+* Missing components
+* Stale components
+* Contradictions
+
+Each rule produces:
+
+* action_id
+* rationale
+* priority
+
+---
+
+### 10.2 LLM Role in NBA
+
+LLM may:
+
+* Rank actions
+* Generate suggested copy
+* Adjust tone
+
+LLM may not:
+
+* Invent actions
+* Suppress rule-generated actions
+* Change state
+
+All outputs are auditable.
+
+---
+
+## 11. Rendering and Outputs
+
+Rendered outputs include:
+
+* Timeline summaries
+* Justification sections
+* Evidence citations
+
+Rendered outputs are artifacts, not state.
+
+---
+
+## 12. Evaluation Layer (Dark Software Pattern)
+
+### 12.1 Scenario Isolation
+
+Scenarios live **outside** the main repo.
+
+They are never visible to:
+
+* Prompts
+* DAG code
+* Agents
+
+---
+
+### 12.2 Scenario Contents
+
+Each scenario defines:
+
+* Evidence sequence
+* Expected component presence
+* Stage label
+* Score bounds
+* Expected NBA
+
+---
+
+### 12.3 Scenario Runner
+
+The runner:
+
+* Spins up the system
+* Replays evidence
+* Waits for DAG completion
+* Pulls CaseStateVersion
+* Asserts expectations
+
+Failures are explicit and actionable.
+
+---
+
+## 13. UI Requirements
+
+### 13.1 UI Goals
+
+The UI must make the system legible.
+
+It is not a product; it is an observability tool.
+
+---
+
+### 13.2 Core UI Views
+
+**Case Timeline**
+
+* Evidence items
+* Artifacts
+* State transitions
+* Scores over time
+
+**State Panel**
+
+* Completion ratio
+* Missing / stale components
+* Current stage
+
+**NBA Panel**
+
+* Recommended action
+* Rationale
+* Suggested copy
+
+---
+
+## 14. Operational Characteristics
+
+### 14.1 Expected Pain Points (Intentional)
+
+You should experience:
+
+* Long DAG runs
+* LLM flakiness
+* Cache invalidation
+* Backfill complexity
+* Scenario regressions
+
+These are features, not bugs.
+
+---
+
+## 15. Evolution Path (Out of Scope, Not Ignored)
+
+Future considerations:
+
+* Temporal vs Prefect
+* Batch reprocessing pipelines
+* Model fine-tuning
+* Human feedback loops
+
+The current architecture keeps these possible without rewrite.
+
+---
+
+## 16. Ground-Truth Invariant
+
+> **All intelligence flows through versioned state, never around it.**
+
+If an implementation violates this, it is wrong.
+
+---
+
+If you want, next I can:
+
+* Translate this into a machine-readable spec (YAML / JSON)
+* Generate a task-by-task build plan for an agent
+* Produce a checklist the agent must satisfy per phase
+
+This is a very strong foundation.

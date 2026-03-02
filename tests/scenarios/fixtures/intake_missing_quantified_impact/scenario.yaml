@@ -1,0 +1,56 @@
+scenario_id: intake_missing_quantified_impact
+description: >
+  Candidate uploads a job posting and a resume, but has not yet added
+  any quantified impact examples. The resume is present and aligned, but
+  the relevance.quantified_impact_examples component is missing.
+  Stage should remain "preparing". Top action should be gather_quantified_evidence.
+
+candidate:
+  full_name: Sam Okonkwo
+  email: sam.okonkwo@example.com
+  location: Austin, TX
+  target_comp_min: 130000
+  target_comp_max: 160000
+
+case:
+  company_name: Velocity Inc
+  role_title: Product Manager, Growth
+  job_posting_url: https://velocity.example.com/jobs/pm-growth-42
+
+evidence_sequence:
+  - at: 2026-03-01T10:00:00Z
+    file: evidence/job_posting.txt
+    source_channel: browser_clip
+    evidence_type: web_job_posting
+    mime_type: text/plain
+
+  - at: 2026-03-01T10:30:00Z
+    file: evidence/resume.pdf
+    source_channel: manual_ui
+    evidence_type: document_pdf
+    mime_type: application/pdf
+
+evaluate_at: 2026-03-01T11:00:00Z
+
+assertions:
+  final_stage_label: preparing
+  completion_ratio_min: 0.20
+  completion_ratio_max: 0.50
+
+  present_components:
+    - opportunity.target_role
+    - opportunity.job_description
+    - identity.resume_aligned
+
+  missing_components:
+    - relevance.quantified_impact_examples
+    - relevance.top_matching_experience
+    - engagement.application_submitted
+
+  stale_components_contains: []
+  contradicted_components: []
+
+  top_actions_contains:
+    - gather_quantified_evidence
+
+  packet_artifacts_exist: false

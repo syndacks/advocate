@@ -1,0 +1,23 @@
+OFFER OF EMPLOYMENT
+Acme Corp — January 30, 2026
+
+Dear Jordan Kim,
+
+We are pleased to offer you the position of Director of Product at Acme Corp.
+
+Compensation Details:
+  Base Salary:    $172,000 per year
+  Equity Grant:   0.08% vesting over 4 years, 1-year cliff
+  Signing Bonus:  $15,000 (paid on start date)
+  Start Date:     March 1, 2026
+
+This offer is contingent upon successful completion of a background check.
+Please sign and return by February 5, 2026.
+
+Sincerely,
+Marcus Webb
+Chief People Officer, Acme Corp
+
+[Note: This is a fixture file for scenario testing. The $172,000 amount
+intentionally conflicts with the $195,000 communicated in the verbal offer note
+to trigger the compensation_mismatch contradiction rule.]
